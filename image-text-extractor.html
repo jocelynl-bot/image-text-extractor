@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>圖片文字提取工具</title>
+    <script src="https://unpkg.com/tesseract.js@v5.0.0/dist/tesseract.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f7;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+        }
+
+        .main-content {
+            padding: 30px;
+        }
+
+        .paste-area {
+            border: 3px dashed #ddd;
+            border-radius: 12px;
+            padding: 40px 20px;
+            text-align: center;
+            margin-bottom: 30px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .paste-area:hover {
+            border-color: #667eea;
+            background: #f8f9ff;
+        }
+
+        .paste-area.dragover {
+            border-color: #667eea;
+            background: #f0f2ff;
+        }
+
+        .paste-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+            opacity: 0.5;
+        }
+
+        .preview-container {
+            margin: 20px 0;
+        }
+
+        .image-preview {
+            max-width: 100%;
+            max-height: 300px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .progress-container {
+            margin: 20px 0;
+            display: none;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+
+        .progress-text {
+            text-align: center;
+            margin-top: 10px;
+            color: #666;
+        }
+
+        .result-container {
+            margin-top: 30px;
+            display: none;
+        }
+
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .result-header h3 {
+            color: #333;
+        }
+
+        .copy-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        .copy-btn:hover {
+            background: #5a6fd8;
+        }
+
+        .copy-btn:active {
+            transform: translateY(1px);
+        }
+
+        .result-text {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 20px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            line-height: 1.6;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .clear-btn {
+            background: #6c757d;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 15px;
+            transition: background 0.3s ease;
+        }
+
+        .clear-btn:hover {
+            background: #5a6268;
+        }
+
+        .status-message {
+            text-align: center;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 6px;
+            display: none;
+        }
+
+        .status-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .language-selector {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .language-selector select {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📷 圖片文字提取工具</h1>
+            <p>貼上或拖拽圖片，自動提取其中的文字內容</p>
+        </div>
+        
+        <div class="main-content">
+            <div class="language-selector">
+                <label for="language">識別語言：</label>
+                <select id="language">
+                    <option value="chi_tra">繁體中文</option>
+                    <option value="chi_sim">簡體中文</option>
+                    <option value="eng">English</option>
+                    <option value="chi_tra+eng">中英混合</option>
+                </select>
+            </div>
+
+            <div class="paste-area" id="pasteArea">
+                <div class="paste-icon">📋</div>
+                <h3>貼上圖片或拖拽到此處</h3>
+                <p>支援 Ctrl+V 貼上剪貼板圖片，或直接拖拽圖片文件</p>
+                <input type="file" id="fileInput" accept="image/*" style="display: none;">
+                <button onclick="document.getElementById('fileInput').click()" style="margin-top: 15px; padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 6px; cursor: pointer;">選擇圖片文件</button>
+            </div>
+
+            <div class="preview-container" id="previewContainer" style="display: none;">
+                <img id="imagePreview" class="image-preview" alt="圖片預覽">
+            </div>
+
+            <div class="progress-container" id="progressContainer">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <div class="progress-text" id="progressText">準備中...</div>
+            </div>
+
+            <div class="status-message" id="statusMessage"></div>
+
+            <div class="result-container" id="resultContainer">
+                <div class="result-header">
+                    <h3>提取的文字內容</h3>
+                    <button class="copy-btn" id="copyBtn">📋 複製文字</button>
+                </div>
+                <div class="result-text" id="resultText"></div>
+                <button class="clear-btn" id="clearBtn">🗑️ 清除重新開始</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const pasteArea = document.getElementById('pasteArea');
+            const fileInput = document.getElementById('fileInput');
+            const previewContainer = document.getElementById('previewContainer');
+            const imagePreview = document.getElementById('imagePreview');
+            const progressContainer = document.getElementById('progressContainer');
+            const progressFill = document.getElementById('progressFill');
+            const progressText = document.getElementById('progressText');
+            const resultContainer = document.getElementById('resultContainer');
+            const resultText = document.getElementById('resultText');
+            const copyBtn = document.getElementById('copyBtn');
+            const clearBtn = document.getElementById('clearBtn');
+            const statusMessage = document.getElementById('statusMessage');
+            const languageSelect = document.getElementById('language');
+
+            let currentImage = null;
+
+            // 貼上事件監聽
+            document.addEventListener('paste', function(e) {
+                console.log('貼上事件觸發');
+                
+                const items = e.clipboardData?.items;
+                if (!items) {
+                    showStatus('剪貼板無可用數據', 'error');
+                    return;
+                }
+                
+                for (let i = 0; i < items.length; i++) {
+                    const item = items[i];
+                    if (item.type.indexOf('image') !== -1) {
+                        const file = item.getAsFile();
+                        if (file) {
+                            processImage(file);
+                            return;
+                        }
+                    }
+                }
+                
+                showStatus('剪貼板中沒有圖片', 'error');
+            });
+            
+            // 拖拽事件監聽
+            pasteArea.addEventListener('dragover', function(e) {
+                e.preventDefault();
+            });
+
+            pasteArea.addEventListener('drop', function(e) {
+                e.preventDefault();
+                pasteArea.classList.remove('dragover');
+                
+                const files = e.dataTransfer.files;
+                if (files.length > 0 && files[0].type.indexOf('image') !== -1) {
+                    processImage(files[0]);
+                }
+            });
+
+            pasteArea.addEventListener('dragenter', function(e) {
+                e.preventDefault();
+                pasteArea.classList.add('dragover');
+            });
+
+            pasteArea.addEventListener('dragleave', function(e) {
+                e.preventDefault();
+                pasteArea.classList.remove('dragover');
+            });
+
+            // 文件選擇監聽
+            fileInput.addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if (file && file.type.indexOf('image') !== -1) {
+                    processImage(file);
+                }
+            });
+
+            // 複製按鈕監聽
+            copyBtn.addEventListener('click', function() {
+                const text = resultText.textContent;
+                navigator.clipboard.writeText(text).then(() => {
+                    showStatus('文字已複製到剪貼板！', 'success');
+                }).catch(() => {
+                    const textArea = document.createElement('textarea');
+                    textArea.value = text;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textArea);
+                    showStatus('文字已複製到剪貼板！', 'success');
+                });
+            });
+            
+            // 清除按鈕監聽
+            clearBtn.addEventListener('click', function() {
+                currentImage = null;
+                previewContainer.style.display = 'none';
+                resultContainer.style.display = 'none';
+                hideProgress();
+                hideStatus();
+                fileInput.value = '';
+            });
+
+            function processImage(file) {
+                currentImage = file;
+                
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    imagePreview.src = e.target.result;
+                    previewContainer.style.display = 'block';
+                    
+                    performOCR(e.target.result);
+                };
+                reader.readAsDataURL(file);
+            }
+
+            function performOCR(imageData) {
+                showProgress();
+                hideStatus();
+                resultContainer.style.display = 'none';
+                
+                const selectedLanguage = languageSelect.value;
+                
+                Tesseract.recognize(imageData, selectedLanguage, {
+                    logger: function(m) {
+                        if (m.status === 'recognizing text') {
+                            updateProgress(Math.round(m.progress * 100), '正在識別文字...');
+                        }
+                    }
+                })
+                .then(function(result) {
+                    hideProgress();
+                    displayResult(result.data.text);
+                    showStatus('文字提取完成！', 'success');
+                })
+                .catch(function(error) {
+                    hideProgress();
+                    console.error('OCR錯誤:', error);
+                    showStatus('文字提取失敗，請重試', 'error');
+                });
+            }
+
+            function showProgress() {
+                progressContainer.style.display = 'block';
+                updateProgress(0, '準備中...');
+            }
+
+            function hideProgress() {
+                progressContainer.style.display = 'none';
+            }
+
+            function updateProgress(percent, text) {
+                progressFill.style.width = percent + '%';
+                progressText.textContent = text;
+            }
+
+            function displayResult(text) {
+                resultText.textContent = text;
+                resultContainer.style.display = 'block';
+            }
+
+            function showStatus(message, type) {
+                statusMessage.textContent = message;
+                statusMessage.className = `status-message status-${type}`;
+                statusMessage.style.display = 'block';
+                
+                setTimeout(function() {
+                    hideStatus();
+                }, 3000);
+            }
+
+            function hideStatus() {
+                statusMessage.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>
